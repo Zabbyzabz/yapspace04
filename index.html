@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>yap space</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;background:#fff;color:#000;font-family:'Courier New',Courier,monospace;overflow:hidden;cursor:none;}
+.layout{display:flex;height:100vh;position:relative;z-index:1;}
+.left{width:55%;height:100vh;overflow-y:scroll;scrollbar-width:none;}
+.left::-webkit-scrollbar{display:none;}
+.yap-wrap{padding:64px 48px 0 80px;max-width:660px;}
+.yap-wrap p{font-size:17px;line-height:2.4;letter-spacing:0.02em;margin-bottom:1.5em;contain:layout style paint;}
+.word,.trigger,.motif{display:inline;opacity:0;will-change:opacity;}
+.trigger{text-decoration:underline;text-underline-offset:3px;text-decoration-style:dotted;text-decoration-color:rgba(0,0,0,0.3);cursor:none;}
+.motif{text-decoration:underline;text-underline-offset:3px;text-decoration-style:dotted;text-decoration-color:rgba(0,0,0,0.85);text-decoration-thickness:2px;cursor:none;}
+.word-popup{position:fixed;z-index:500;pointer-events:none;opacity:0;transition:opacity 0.25s ease;transform:translate(-50%,-110%);}
+.word-popup.show{opacity:1;}
+.word-popup img{width:220px;height:auto;display:block;box-shadow:0 4px 16px rgba(0,0,0,0.12);}
+.right{width:45%;height:100vh;position:relative;overflow:hidden;}
+.img-slot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:52px;opacity:0;transition:opacity 1s ease;pointer-events:none;}
+.img-slot.visible{opacity:1;}
+.img-slot img{max-width:100%;max-height:80vh;object-fit:contain;display:block;}
+.trail-img{position:fixed;pointer-events:none;z-index:1000;object-fit:cover;opacity:0;border-radius:2px;transform:translate(-50%,-50%);transition:opacity 0.2s ease;}
+.cursor-dot{position:fixed;width:4px;height:4px;background:#000;border-radius:50%;pointer-events:none;z-index:1001;transform:translate(-50%,-50%);}
+header{position:fixed;top:0;left:0;right:0;z-index:100;height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;pointer-events:none;}
+.logo{font-size:10px;letter-spacing:0.22em;}
+.pct{font-size:10px;letter-spacing:0.15em;color:#bbb;}
+.mic-dot{position:fixed;bottom:18px;left:18px;width:5px;height:5px;border-radius:50%;background:#ccc;z-index:100;transition:background 0.1s,transform 0.1s;}
+.mic-dot.on{background:#bbb;}
+.mic-dot.loud{background:#000;transform:scale(2.2);}
+
+/* ─── BACKGROUND ─── */
+.bg-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.bg-left {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 55%;
+  height: 100%;
+  background-image: url('assets/bg-left.png');
+  background-repeat: no-repeat;
+  background-position: top left;
+  background-size: cover;
+  opacity: 0.18;
+}
+.bg-right {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 45%;
+  height: 100%;
+  background-image: url('assets/bg-right.png');
+  background-repeat: no-repeat;
+  background-position: top right;
+  background-size: cover;
+  opacity: 0.18;
+  transform: scaleY(-1);
+}
+</style>
+</head>
+<body>
+
+<div class="bg-wrap">
+  <div class="bg-left"></div>
+  <div class="bg-right"></div>
+</div>
+<header><span class="logo">yap space</span><span class="pct" id="pct">0%</span></header>
+<div class="layout">
+  <div class="left" id="left"><div id="yapContainer"></div></div>
+  <div class="right" id="right"></div>
+</div>
+<div class="word-popup" id="wordPopup"><img id="popupImg" src="" alt=""></div>
+<div class="cursor-dot" id="dot"></div>
+<div class="mic-dot" id="micDot"></div>
+
+<script>
+const IMGS=["assets/scroll/img00.jpg", "assets/scroll/img01.jpg", "assets/scroll/img02.jpg", "assets/scroll/img03.jpg", "assets/scroll/img04.jpg", "assets/scroll/img05.jpg", "assets/scroll/img06.jpg", "assets/scroll/img07.jpg", "assets/scroll/img08.jpg", "assets/scroll/img09.jpg", "assets/scroll/img10.jpg", "assets/scroll/img11.jpg", "assets/scroll/img12.jpg", "assets/scroll/img13.jpg", "assets/scroll/img14.jpg", "assets/scroll/img15.jpg", "assets/scroll/img16.jpg", "assets/scroll/img17.jpg", "assets/scroll/img18.jpg", "assets/scroll/img19.jpg", "assets/scroll/img20.jpg", "assets/scroll/img21.jpg", "assets/scroll/img22.jpg", "assets/scroll/img23.jpg", "assets/scroll/img24.jpg", "assets/scroll/img25.jpg", "assets/scroll/img26.jpg", "assets/scroll/img27.jpg", "assets/scroll/img28.jpg", "assets/scroll/img29.jpg", "assets/scroll/img30.jpg", "assets/scroll/img31.jpg", "assets/scroll/img32.jpg", "assets/scroll/img33.jpg", "assets/scroll/img34.jpg", "assets/scroll/img35.jpg"];const TRAIL=["assets/cursor/trail00.jpg", "assets/cursor/trail01.jpg", "assets/cursor/trail02.jpg", "assets/cursor/trail03.jpg", "assets/cursor/trail04.jpg", "assets/cursor/trail05.jpg", "assets/cursor/trail06.jpg", "assets/cursor/trail07.jpg", "assets/cursor/trail08.jpg", "assets/cursor/trail09.jpg", "assets/cursor/trail10.jpg"];const TRIGGERS={};
+const TRIGGER_KEYS=Object.keys(TRIGGERS).map(k=>k.toLowerCase());
+const MOTIF_WORDS={'burmese':'heritage','myanmar':'heritage','mom':'family','mother':'family','internet':'internet','grandmother':'grandmother'};
+const MAX_MOTIF_PER_SECTION=2; // curate: not every repeated word becomes a jump-link, just 1-3 per paragraph
+
+const sections=[
+  `As cheesy as it sounds, my work do root in the ideas of love.`,
+  `Everytime i say or acknowledge that i feel its cheesy and cliche, like yeh everyones work goes back to the idea of love. It was the first concept we learn, that later brunches out to ideas of empathy or happiness.`,
+  `The first heartbreak is your mother, or father, a guardian figure. The first figure you put on a pedestal, the world seemed so small but this giant that held your hand, or pushed it away, the first you ever interact with. The roots, seed has been planted, it is up to them to teach and help us grow. Whether strong and healthy, or weak and scared. It starts with the first person.`,
+  `Slowly more people come in, big people, small people, people that shoved you on the ground or the person that holds out a hand for you.`,
+  `I seeked out for love in many forms, in partners, family, friends. When we think love we think of the movie romantics, the guy chasing the girl dramatically, kissing under the rain and professing their love loudly, confidentally and proud. "Love is everywhere" that line.`,
+  `Hating love is cliche, loving love is also a cliche, everything is a cliche. And yet we seek it so much, human wanting love, or the idea of being seen and understood, to be special, to be comforted.`,
+  `Did dating apps ruin love?`,
+  `The idea of seeking for a partner has always been around, arrange marriages, concept of marriage to tie families together.`,
+  `Yes and no dating apps did ruin love or the concept of seeking partnership. "Dont expect to find love on a dating app", to be blamed on hook up culture`,
+  `Hook up culture?`,
+  `The idea of finding love on a dating app is cringed upon, many people feel its unachievable these days, and theres irony on it. People with different intentions, easy solution is communicating intentions, but we are human, ego and lies exist, un intended lies, sometimes it wasnt a lie, but a change of intention. We change our minds often, i sometimes plan to wake up and want bacon and egg but when i do wake up, i make coffee and toast. Comparing love and breakfast isnt fair but it is the same.`,
+  `Why am i so mad?`,
+  `I place my value so much on external validation, i used to think just on parents, but i realise its also on potential love partners, and then realise platonic as well, constantly asking are they mad at me? "Are you mad at me?" my best friend and classmates would tell me to shut up whenever i ask that question. But i didnt realise it deeply reflected my self esteem, how i saw my self worth.`,
+  `I end up reflecting more, is this because of my mother and father, because of my brothers? Because i had no friends growing up, that is a lie, i grew up with a friend from primary school who only realised after primary 5 that what she thought was an act of friendship was actually bullying, and a childhood friend that i used to play pretend in church till we turned 10, but we only saw each other on sundays. In my eyes, i grew up alone, so i seeked for friendships, i just didnt know how, movies and shows didnt teach me that. I loved watching tv and watching anime as a way to cope, so media became my deep dive. A coping for the external love. There i made online "friends" that validated me and my experience. I felt "seen", while not knowing how they looked. Rarely was i asked for face reveals, it was enough to have a connection.`,
+  `I started being part of internet subcultures like tumblr, facebook. I lied about my age to be on facebook, aged 31 but i was 9, random year selected, without doing any clear math. I was too dumb to simple math, i should not have been on that site. I made friends online from games and chatrooms.`,
+  `This is where my concept of love warped, along with reality, expectations and seeking validations increase, or maybe it was puberty.`,
+  `My experience with dating apps.`,
+  `I downloaded okcupid, a dating app, and i was attending an art college. Making connections got easier and faster. I didnt need to muster up courage to walk up to someone to compliment them, i could just do it behind my screen, on my phone. I discovered alot of my peers were on that app, sometimes even matching them. At some point i was saying yes to everyone because it was no longer just a dating app, it became a socialising app, to finally talk to my peers. What was i gonna do? Walk up to a stranger and strike up a conversation? Tell them hey i like your shirt, you listen to that band as well? No. why should i when i could judge them behind a screen, strike up a conversation with an opening of "hi i saw you in school". Rejection was easier when you dont have enough ties to them, but man it hurts when you created a connection.`,
+  `BOO! You got ghosted! Weep and cry, you arent pretty enough, you werent cool enough, lacking in swag and nichenes.`,
+  `Dating apps made me question if i was pretty enough to be loved, not just romantically but friendships too. I started doubting if the friends i made via app liked me, if i wasnt pretty enough would i be ignored in school. My childhood proved to me yes. Curating thy self became more for me. I only used pretty photos of me, photos with friends to show i have a social life, prompt responses where i could look cool and niche, hip and desirable, the want and need to attract the type of people i want to be around. But you cant stop with just curating the dating app, no, you need to curate your instagram, your twitter, messenger profile pictures, because its going to lead outside of the dating app.`,
+  `"I like you, whats your instagram/ telegram? Can we message there i hate it here" but we met here. If you hate it so much why are you on here? Was there a gun to your head to be here?- everyone had a love hate relationship with dating app`,
+  `Personally, i was addicted to it, i hated it but i fidget with it, i became more brutal, more judgemental, a different person on the app. A friend commented, "ive never seen this side of you before" true, friends rarely seen the romantic or lustful side of me, i become different, but i also become more hateful, in my eyes, something im not proud of.`,
+  `But everyone, every single person has said, "man i hate this dating apps" yet uses it. Its almost like we all got so dependant on using it for connections and validations; styperotypical (not always true) women use it to just get validation, to know they are pretty, desirable, men, they just use it for booty calls, its dumb to expect anything more this day and age, and to that i say, its interchangeable, sometimes men swipe to validate themselves and sometimes women just want something casual. These days people are stereotype to only wanting a quick love, nothing serious, fear of intimacy, too busy and many excuses or such. Some dont desire marriage, some desire a family and so on, the point is not everyone has the same intention, and its ok. Whats not ok (personal ethics) is not communicating and misleading, promising something else. Plans change, ideas get fog and two different directions can form, but communication is the key.`,
+  `Communication is a lost/ rare practice.`,
+  `We say communication is easy, everyone communicates. Not true. Its a thing we learn not a thing we were born with. Human language isnt just verbal, but actions, thoughts, touch, etc. sometimes its beyond words. Words can never describe fully how we feel, but we can try our best.`,
+  `First we need to understand ourselves, we need to get "what is up." how are we feeling, why are we bothered, why are we uncomfortable? Key to understanding self brings out empathy.`,
+  `Does self-esteem affect love?`,
+  `Yes`,
+  `I am griefing. The death of my language. I regret asking you to say the numbers in english, it has become a habit. I regret not knowing how to speak the tongue of my people, i am lost and i dont know how true am i to my roots. Broken language. Broken pronunciations. How embarrassing. When i attempt to speak, i struggle, when i attempt to listen, i struggle as well. How embarrassing is when i try, it comes out broken, jumbled, incoherent, obscure. Is this what my mother had to go through when she first came out of her motherlands? For safety and security? I regret asking you to repeat your sentence in english. The death of a tongue, i grief.`,
+  `I dressed like how my grandmothers and my mom dressed. I remember doing this when i was a child. A ritualistic. Burmese herbal medicines made naturally. I can only bring very little here. I remembered when i was younger, a big grinder, heavy to carry when i was child, i wonder if it would still be heavy now that im older and stronger.`,
+  `I had a bigger grinder when i was a kid and we would have stacks of tanka, almost to our disposal. Now this thin stick of tanka is sacred to me, this red powder we call mediine powder, i wish i had appreciated it more growing up.`,
+  `I remember my grandmother teaching me how to apply it onto my face, my cousins would wear it in theirs as well, and id be shock when they apply too much, covering their whole face, the dry clay hardens and whitens them, AH! And followed by laughter in the room.`,
+  `In Singapore, i rarely met other burmese outside of my mothers church and my family. One time during pe we had to run in the public park. My classmates and i ran past a lady pushing an old lady on a wheelchair, and my teacher turns to me and goes "look at whats on their face" and drew circles on his cheeks with his finger tips. I recognised it instantly, it was tanaka. We sometimes decorate our faces with it.`,
+  `I wish i took pictures growing up, if anything i was ashamed of wearing tanaka. There was shame in being burmese, or maybe i jusy felt ashamed of being a minority in some way.`,
+  `Red medicine. My grandmother used to rub this red powder on me when im sick, especially when i have a cold. She rubs it on the bridge of my nose, chest and back, and put alittle bit on my hands so i ciuld rub it and sniff it. Instantly i ciuld breathe again. I always thought this was a magic powder, some sort of witchcraft.`,
+  `I used to chant while mixing or applying, i pray and thank the lord, i put affirmations. I didnt hope it would come true, i looked forward to it coming true.`,
+  `All these were taught by my grandmother. These practices were what kept her alive in my heart.`,
+  `A friend asked me are you brown or yellow? And i immediately went yellow duh, but my dad looked at us very confused and asked us "do i look yellow to u? We brown"`,
+  `I started questioning wait am i yellow or brown? But asians are yellow stereotypically, but not all asians are yellow cause we call our indian bruthers and sisters brown, but they are asian so why am i so focused on brown or yellow.`,
+  `Deep diving my family history did not help, we were too mixed, with chinese blood, thai blood, indian blood, anglo blood but my mother said, "its easier to just say we are Burmese"`,
+  `It is alot easier, explaining our history just complicates things, but im still wondering, what are we?`,
+  `"American thinking to divide"`,
+  `Oh`,
+  `Oops`,
+  `TRUEEEEE`,
+  `"U are shan bumar, its confusing to think in in colors, so we dont do that, everyone does skin lighting there theres no point"`,
+  `Idk if i should feel indifferent or relief or sad about that`,
+  `Idk`,
+  `Burma mamae par nhang!! My father would say, and other family members would use this phrase cheekily, but theres truth and love in that phrase. Burma mamae par nhang (dont forget you are burmese!)`,
+  `Sometimes i would ask my mother to repeat what she had said in english. Sad and unfortunate to admit with a dash of shame, there was a language barrier between my parents and I. actually - not just my parents, my relatives as well. There was this embarrassment when i visit back my homeland, talking to my relatives in broken burmese, mixed with english. I have disconnected so much with my own mother tongue.`,
+  `Homeland- i moved to singapore when i was 6 years old, i was born in sydney, but never had a connect to that land. I stayed in myanmar for a while, but it was short lived yet, i can still remember the roads, the houses, ways my cousins and i had to kill our bordem. I didnt have any other attachments other than my cousins and the house i lived in. we all shared the house and stayed together. When i first came to singapore, i thought the ride there was just a simple fast ride, and asked my mother can we go back home, to our bed, not understanding that that was our new home.`,
+  `I remembered crying to my mother when we were offered singapore citizenship in 2009, same year i was hospitalised. I remember feeling conflicted about it, i was fearing losing my identity as a burmese, almost like a betrays or some sort for changing citizenship, maybe it was the assumption that that was cutting the roots of "home"; my relatives, the house, my childhood. Little did i know that i was in singapore longer than i was in myanmar. Im glad my parents didnt hear my plea, that decision changed our lives for the better.`,
+  `As much as there was these roots, i was didnt really know what our culture was, i think i didnt even know what culture was. 4 major races, chinese; indian; malay; others. I was in the others category, for context, chinese were "the majority." i rarely run into other burmese.`,
+  `SEAsia has a skin complex issue. The need to be fair skin. Tan skin meant you worked at farms or come from lower class but fair skin meant you were upper class.`,
+  `I used to scrub my skin as much as i can in hopes i could become fairererer.`,
+  `When i was a child, i wanted to be white, i thought it would be more interesting if i was white; i wanted to be japanese, cause anime; i wanted to be chinese so its easier to fit in, i wanted to be anything except burmese, i didnt know anything about being burmese, except that i was a minority. It was rare for me to find another burmese. I didnt know the burmese traditional culture, i didnt even know what a culture was; just that my ethnicity of being burmese was enough to be bullied. I wanted to be anything but burmese.`,
+  `I fear i have imposter syndrome, i dont know if this body is my own. I can barely speak my own tongue now, i feel guilt when i ask my mother to repeat back in english.`,
+  `"MA IN ENGLISH PLEASE" Damn that broke my father's heart.`,
+  `I crave for normality yet fear of mediocrity. I want to be normal yet not like the others.`,
+  `Is this performance addiction, am i performing. Rituals and care, for of self love.`,
+  `When is it no longer self love? - when are no longer feeling good i guess, when it becomes a play.`,
+  `Self love, what is the concept of that? High self esteem. Self care. Maintenance of self? The body is the temple, the mind is the head of the shrine and the heart is the offering. Good offerings. When bad offerings come in it is only right to reject or to cast it aside, for it may just rot in the corner, molding and infesting the others, tainting the shrine; the temple; the mind; the body falls, left in disarray and uninhabitable, how do you expect someone to habitat in a space so full of mold? How can you rest if there is no where to lie on?`,
+  `24 march, 11.40 pm. FUCK I FUCKED UP! I ACCIDENTALLY REACTIVATED MY INSTAGRAM WITHOUT REALISING. I caught myself typing instagram on my browser, as a form of habit.`,
+  `I was scrolling an account, everyone is a girl, for research, and it took me a while to realise, WAIT I CAN SEE THEIR STORIES AND POST OMG IM LOGGED BACK IN FUCK FUCK FUCK.`,
+  `I was doing so well, this is so embarrassing omg. Also i have not had any food today, and i took 3 dexies, am i just addicted to not eating anymore. UGH. FUCK. WHY DID IT REACTIVATE.`,
+  `Ive been talking and typing whole day. There is now comfortness to typing and talking to self.`,
+  `I should just make a book on everything i wrote today. Could be the artwork for finals, thoughts? Well i better eat once i am home and rest. I can feel the burn out coming in. maybe ill skip in thursday.`,
+  `Why was i offline and result of being off instagram. I was spiralling, i was stalking, i was dooming, i was stuck scrolling on days i refuse to leave my bed, it became too frequent. For attention i wanted to "be missing"; to be missed, that was performance in itself.`,
+  `Results: scrolling was less, i was more locked in with work. My gaming laptop died right before school year started, this forced me to be even more locked in with school works and reading books. Ive been reading more, ive been more active with myself. I suddenly feel theres more time, theres less distraction.`,
+  `I found this site during a dive into one of the recommended reading from annika, cause curse you paywalls, i wanna read! Anyways, i dived more into this website i found, with loads of entries from this one artist, and her rambles, makes me want to have a site for that as well so i can blog my thoughts, i think i think interestingly.`,
+  `But yeh, her writing, super interesting, similar topics as me as well. Will make a whole subtab just for her.`,
+  `But gurl i wish you werent behind a paywall as well.`,
+  `Silent moment convo. Daily ritual culture. The mirror and vouyerism. What do we see? Is skincare or makeup? Lets go back to ritual. How do we co. The disappearance of rituals. Ritual is an act that situates time. How do we feel about it being filmed? Documented? Depending on the angle, if straight on, it would be more performative. The mirror was seen as a second thought. Mirror and i am not the focal part. The objects are the main focus. The overshoulder makes it seem like a peek in. Is this a privilege to see a different culture. The effort to make the product, the grinding. Is this inherited knowledge or. The blue hair and waterbottle makes it question is this contemporary take or about history? Theres care in the work. But tea was clocked, they heard me huff before i started. Was i doing this for myself or for someone else. The tiredness of rituals and routine. There is a loop in the video. The idea of african time, but the ancestral history of it, maybe look into that. What is time? Does the work represent. Takes one generation to lose a language, but three to gain back.`,
+  `I cant stop reading, im enjoying it but i need to do my work. The restriction of annotated assignment, im having fun but do these readings relate back to my practice, hmm who cares fuck it yes it does.`,
+  `I am learning. I am on one dexie, i should have taken a half now i feel like im going to have a heart attack or a panic attack. I cant tell the difference sometimes. Can you panic till a heart attack? Can heart race so bad that you mistake it for anxiety but actually you are just having heart attack?`,
+  `God i wish i have a boyfriend that would say "yeh my girlfriend likes to read and research"`,
+  `I love this persons (Madison Huizinga) substack. Its so relatable, even when i know we have different taste in things yet these are things people do think about and its nice to read something relatable. The anxiety of echochamber when reading though. Am i right or am i just being validated im right. Is this just anxiety? Or excitment or fear? Or is this just the dexies, im making these dexies my personality and my coping and excuse to when i turn more hyper, i need to be reminded that i have a personality disorder (bpd) so i have to becareful with my happiness levels and cheerfulnessl. Too much cheerfulness can lead to crying.`,
+  `My grandma used to say "dont laugh till you cry" which was weird, as a child, actually fuck no its weird now still but i get it. Sometimes being too positive can be toxic and overwhelm, too much burst of energy. Understanding read the room, or just calm down with energy level. But also this whole if they cant reciprocate it, leads to disappointment. Is that expectation? High expectation onto people?`,
+  `I wish you could see life is beautiful. Beyond just people, words, actions, i wish you could see the people that care and love you. But i think you do see that. At what were did the line blur where i saw u and end up seeing myself?`,
+  `I blame her, i feel she was someone that pushed people into the corner of suicide, just so they wont ever see her face. But whats the point in blaming.`,
+  `What is my art right now, i am so lost. I dont know where and what can i create. Aestheticallu? Im not having fun researching, studying and learning as i used to. Im distracted. Clouded judgement.`,
+  `I wish you knew how much you are loved. I wish you see how i see you, how beautiful you are to me, i wish you love yourself as much as i love you. I wish you could see how much i see you i see love. I wish you knew there is more, beyond just the words i love you, beyond care.`,
+  `If i could be reborn again, i would just to meet you again and again and again, never will i be sick of it, never will i avoid your gazes. Our fate.`,
+  `What is love but unconditional?`,
+  `Work dedicated to two dear friends in my life and my family, Cal and Evie.`,
+  `The words im sorry is not enough, there were scars, keloids that we busted open and kept poking. Pus ozz. You hate body fluid, you hate many things yet the way you eat, the way you smile, I see love and joy. The words thank you isnt enough, its beyond that. I pray at the end my everlasting love is felt again, different by then yet there.`,
+  `I dont feel pretty, my skin is read, im coughing and crying, i dont feel good. I feel my skin aged from all the crying and stress. I thought i was recovering from the flu but the stress is making it come back. I lack care, i can see it on my face, its not the way i desire it to be. I catch myself staring at old images of me, when i was happy, and looking at my skin, i could see it was clear, radiant, there was youth. But right now there, i just feel my hands running it up down, itchy face, red, swollen eyes, deprived of rest eyes. How do i get rid of these eye bags.`,
+  `How will i be able to find love if i dont care for myself. How will i find a loving caring partner if i am lacking self care. I am just tired. I wish i could just rest but theres so much. I yearn for that youth again, where my skin was clear and i laughed.`,
+  `I wish to care for myself again. I wish i could. I wish my skin was clear again, these bags gone, dressed up, healthy. I want to be my desired self. I dont want to be alone. I am afraid of dying alone in a coffin with no romantic love. Platonic and family, i have many, but romantic, i have none, and i desire it. I desire to be loved and to love romantically. I am desprate. I am a desprate woman, but even then i wish not to settle, i dont want someone that avoids my kisses or make me ask for them. I want someone that turns around and without a word hugs and kisses my cheeks, fall asleep on my arm, eat with me, cry with me. I had it once, but i didnt love myself enough to see his love.`,
+  `My best friend uses em dashes alot in her writings and texts, long before chatgpt existed. Her works are shown as academic writing examples back in the college we met at, so now i wonder, will the students assume its ai immediately?`,
+  `We live in an age that technology serves us, make us faster, in turn forcing us to.`,
+  `Grieving in digital space, its so common now to grieve online. At one point i question is it for attention but looking at my mother i realise maybe now its just to share the grievances within her community, to express herself and have support. Is it attention seeking to seek for support?`,
+  `Digital space, community, shared emotions.`,
+  `The idea of how AI has changed writing punctuations, how we easily claim "I could tell this was AI", forcing ourselves to train ourselves to identify and relearn a language. My best friend loves to use em dashes in both academic and casual texts. I knew this yet I jokingly asked her, "did u srsly use chatgpt to text me?"`,
+  `i thought of how judgmental I was online, behind a screen, which started affecting my self esteem because of my belief of the world mirrors you, so if you are thinking awfully of someone, maybe they do too, so i worked hard on making sure i was neutral. I started noticing i was seeking validation online just as much as another person, when i was younger, seeking validation was a physical activity, asking in person. Now its through likes, comments and shares. Fast dating also has effected my perspective of what love should look like, rather than a slow intimate process. Anxiety of the image online and offline. Seeking validations online. There is alot of external.`,
+  `Fast dating also has effected my perspective of what love should look like, rather than a slow intimate process. Anxiety of the image online and offline. Seeking validations online.`,
+  `i bonded with my brother through games and memes. Facebook is where I documented an early stage of my life through sharing texts, images and videos posts.`,
+  `Since young, the digital space was my comfort. I would interact with strangers, be in subcultures and fandom, there was community and the feeling of place of belonging and understanding. Humour could be found easily. The first time i met my two older brothers, they introduced me to a video game. Second time i reunited with them, they showed me memes and anime. This is where i started feeling comfort, like a safety blanket.`,
+  `In secondary school, i grew more aware of the dangers of the internet through postings. Like images of self being used for new bullying tool. Cyberbullying.`,
+  `In college, i started using dating apps. Not just for dating but to make friends. It became a tool for socialising. Self image became more important, fast pace dating, new terms for different stages of dating.`,
+  `Through my life long experience of the digital space.`,
+  `The digital space has always and will be a comfort space for me like a safety blanket, but i cant help but feel anxious about it at times. My childself loved memes and interacting with strangers from chatrooms and fandoms, dangerous but it felt like a community, the feeling of belonging somewhere.`,
+  `As an adult i noticed how much self-worth i place myself via digital spaces. I caught myself seeking validation online. I was developing further anxiety of my self image and principles the more following i got.`,
+  `I started questioning internet cultures, how it influenced the pacing of our lives, beliefs, community, social relationships. I questioned influencer culture, why do we put them in higher powers to influence us, and are they even influencing us or being influenced by a higher power? Surveillance capitalism.`,
+  `Discussions with my peers about the internet practices and experience.`,
+  `I wrote an essay on digital landfill. Photography has become easy with the idea of cloud storage. Because of that theres lack of care with photos and data. Photo circulations and image rights. Data rights.`,
+  `Ive also realised language has been changing drastically through internet slangs and AI writings. We are becoming more skeptical of whats ai and whats not because of the impersonation of living things. However in order for AI to be able to impersonate, they need to be feed data, which is what we have been feeding through every scroll. The point isnt to stop scrolling or blaming ai, but to be more mindful of ourselves and bring back the care and culture.`,
+  `Silent colonisilisation and late stage capitalism, through data harvesting theres surveillance capitalism, flooding the feed with algorithm tailored to us. Its nice to have it tailored to us, its fun to have feed that we would enjoy, but it also desensitised us not just from violence but importances of current issues.`,
+  `I am scared of my writing being seen as AI, but i have used it and seek its help before. AI isnt inheriatly a bad thing but it is a tool. Do we blame the fire when the arson lit the orphanage fire or do we blame the person that used the fire, the tool. Do we ban the tool to prevent more orphanges on fire? What do we do with this arson? Educate? Punish them?`,
+  `I see social media in two different entities, corporate being (ew) and the community (aw). Separating the two because the people arent the corporate but just users while corporate pushes agendas for captialistic reason. Corporates know they can market on the division of the community.`,
+  `Facebook has seen me since i was nine or maybe even younger. It has documented part of my life, Though, even when i stopped using it, my mother still updates hers and tags me in photos. My relatives can still see me growing up, they know how i look right now even if i dont talk to them. My grandmother had a facebook account. Sometimes i use it in remembrance to her. Scrolling and seeing how she texted, it was just how she talks at home. It was full of fond memories, flowers and updates. If her data was used to impersonate her, to talk and message like her, it will send me to a horror shock. Worse than being chased by a clown with a knife.`,
+  `Time is frozen for her there. That digital self of hers on facebook is stuck in a certain stage.`,
+  `April 20, monday. I have been thinking to myself do u hate me do u hate me? And rechecking my following to see if anyone i have anxiety over has unfollowed me. Ive done so well past few months not being online but the second i had accidentally reactivated, i get sucked back in and checking in on who still sees my story. I am anxious, I don't need their validations or thoughts but the anxiety of do u hate me still exist. Indifference is a comforting level. I am scared i am not liked. I am scared ill lose this following over a small matter. Slow responses, idea of ghosting.`,
+  `Facebook has documented a young part of my life, which i consentually did (idk if i can consider it consentual when i was uploading it at the age of 9)`,
+  `But there was abit of relief when my mom said not everything is online, theres some in our family album.`,
+  `I realised i like documenting myself alot because there wasnt alot of photos of me in my family album growing up compared to my brothers. The third child so the mild stones were seen 3 times, maybe it lost its specialness, in my own self-deprecatory way.`,
+  `May 5th early morning convo with mom. Itd be hard to find ur actual roots. Because we are a mix breed of everything. My dad is Burmese, my mom is Shan. but she said if u were to ask her anything about Shan, she would say she doesn't know anything other than why her skin is fair, cause she is a fair Shan. My family is more or less labeling of ethnicities/ tribes; more on just how we were raised. It was easier to say we were burmese.`,
+  `Question to my mom: when did we lose the Shan knowledge/ practices? Do you think it was after or before may may (my grandma). Before May May we lost our practice, because of my great-grandmother, who doesn't practice the Shan culture. Do u have theories on why? Depends on the person i guess, like its just a label, but for some they take it serious but your great-grandmother didn't care. Some only marry within groups. Your great grandfather (mom's mom's dad) was burmese, dark skin burmese.`,
+  `What was grandpa (mom's dad). Eurasian, something white, don't know, don't care cause he was considered Burmese societally. Because he was culturally Burmese, he was practicing Burmese. Dad is Chinese Burmese, but my family dont like to claim the Chinese side. But your niece is more chinese than us, lol. 25 percent chinese. 75 percent chinese (teah, my niece). So am i burmese? Yes! (my dad). Race is Myanmar, because my mom and dad are Myanmar. There are small details but overall we're Burmese. Mom: i write Burmese when people ask whats my race. Why are we saying maumare and not Burma. Theres two thing in burma, one is language, then the other is race. We used to be able to say burma but now we cant say it because of the government, everything is myanmar. Because the british caused it burma, but it was wrong to call it burma cause it wasnt just burmese, there were other races in it. Myanmar as a name umbrellas the whole country. Its actually to be more inclusive, even tho its made from junta. It was a way to move on from the colonial past, but countries like us and the British claim its a form of rebellion from the military, but uses it as a colonising way.`,
+  `I called my mom and told her my topics and what I've been researching on. Keywords: Digital space; Grieving; community; online.`,
+  `Accessibility to grieve and support through digital space.`,
+  `Hey mom, am I allowed to grieve about my Burmese identity? Like I barely spoke the language growing up, and my life was mainly in Singapore, the ratio of me being in Myanmar compared to Singapore is like idk 6:19. Which is weird because i came to Singapore not understanding English, and now i barely speak Burmese. I feel embarrassed when i try to speak it and its broken. I feel shameful not being knowledgeable while claiming i am Burmese. Am i allowed to grieve a culture I didn't appreciate enough?`,
+  `I tried to talk to my cousins in burmese, but i still feel embarrassed that i couldnt speak it well. I know they know im trying, they could see im trying really hard to hold on to roots, but they can also see i was struggling with holding onto a root so confusingly. I feel guilty that i was trying to practice on them, but it was relieving to hear a cousin of mine said, "she can speak it still, she understands us well, she just fumbles but shes still understand what we are saying." i felt sympathy at that moment. I felt there was room and understanding for me to try.`,
+  `Mom, am i allowed to grieve for the house i used to stay in with 7 of my cousins; 3 aunts and my grandaunt who owns the house. The house that all my other cousins, aunts and uncles, grandmother's siblings gather to because we all lived near each other. The neighbourhood I was allowed to enter houses through the windows off and watched my aunt teach children while i couldnt school. I was only there till i was 7, but am i allowed to grieve for the loss of it?`,
+  `Can i grieve for a country i only went to once a year, and not appreciate it enough. I can see now i didnt appreciate it enough, i should have taken more photos, more conversations, i should have spoken more to my aunts and uncles, my cousins in my language.`,
+  `My dad: YES YOU CAN! YOU ARE MYANMA! Me: what makes me Burmese. My dad: Your mother and I are. You are from there. Me: But I was born in Australia. And I'm Singaporean. My mom: race isnt like religion, doesnt matter where u are born, you werent picked up from Australia, your blood is Burmese regardless.`,
+  `Ethnicity/Nationality. Enthicially i am Myanma. Nationality i am Singaporean. My ethnicity can't be changed, nationality can be. One is blood, the other is document.`,
+  `Community, family, people that look like me, identity. But i still want to go back to online stuff, or the idea of.`,
+  `Different forms of community in online spaces, different sub groups; different interactions; different intentions.`,
+  `Questioning if im really from that community space, identity of self.`,
+  `I was gonna make Instagram as a medium and as an essay medium, but i see too many from chinese singaporean girlies and now i dont want to. Its so annoying like full of rage bait sia. Bro im not orginal, wtf is everyone saying.`,
+  `Actually some makes sense i liked a few of them.`,
+  `Pardon my singlish typing, tbh, im still adapting back to ang moh accent.`,
+  `On a plane with my friend tyson, flying back to melbourne from singapore after our bangkok trip. T: bro i cant wait for you to go back to your normal accent, or a normal accent? Me: Normal!? Love you bro, but that's gotta be racist.`,
+  `I repeated this convo to a friend of mine cause i thought it was funny. Friend 1: Yeh why we always have to be the ones to change our accent to understand, like not just here but in singapore too. We talk to some angmoh, we change to their accent so they understand us, why dont they ever do that for us? Friend 2: true horh, why everytime we need to adapt one. But also maybe cause we make fun of them when they do, maybe they dont wanna seem racist for doing "chinese" accent. Me: true, maybe. But also its not chinese accent its just mix of south east asia stuff, like we go china they also wont get it. Actually wait ah if we go china you think wed copy their accent or they copy us? Friend 2: i dont think they care one lah. I think its just damn singaporean/ malaysian thing maybe to change. Speak good english you know.`,
+  `For me to know for you to find out!`,
+  `Why am i so stuck on digital? I guess its an easier medium for me. Find it cooler and prettiers, easier to flex my work.`,
+  `Chat am i real. Will you remember me?`,
+  `Hmmm.`,
+  `Yap diary.`,
+  `Beyond just culture? Video games, anime, memes, online personas.`,
+  `Third world countries and anime.`,
+  `There are many ghost of my accounts to which i have abandoned, if one day someone was to create a model of me through all my social media like facebook, tumblr, twitter, they will have different personas of me, all in different ages as well. Social media captured the time of essence of how i was like at that time i used frequently. For example, facebook. Facebook has documented me since i was 7 till i was 15, when i have finally stopped using it. The account still exist. My mother still uploads pictures of me so i would say facebook's data base of me is being updated. Though it doesnt know much about me apart from, whose my family, how i look, where I was schooled, when did my parents visit me, when did i go back to singapore. Yeh no, facebook still has updates of me that its possible to track my habits off, but does it know what i am consuming? Yes, because its all meta. I use instagram devotedly, always updating, always scrolling. Just because i do not use Facebook, does not mean i am safe from Data harvesting.`,
+  `Ninajirachi, Fuck My Computer.`,
+  `No really i want to fuck my computer. The first computer i came across was the living room communal computer, and i would play so much barbie on it, not understanding anything i was reading, terms and conditions? Acknowledgment of Guardian: type in their email so they know you were playing the game, ill just add my email cause i didnt know what it all means. Also my mom was getting spams of me being online on club penguin or barbiegirl.com. I learnt how to use a computer before i learnt that my mom's name was not mom.`,
+  `When i was 8 to 9, i was hospitalised for a year, so all i had was watching anime, cartoons. I was already learning how to find all seasons of spongebob and powepuff girlZ. I knew how to pirate the sims 3 before i got to graduate secondary school.`,
+  `Yeh i was often bored in real life, i make it very much my personality that i just wanted to be online, talking to strangers.`,
+  `Talking to strangers online is the best decision I ever made, reality is lemon and the internet is my lemonade, Shawn Wasabi & YDG, Burnt Rice Lyrics.`,
+  `I made so many friends via online chatrooms, forums and games, it was dangerous but i started learning a skill to vet out people better, obvious by being victims to the dangers (groomers, parasocial). I came across a game called "welcome to the internet" that shook me awake about the dangers of my information online. I didnt care that my classmates were seeing my digital footprints but imagine it being used as a potential tool to stalk, or even worse for trafficking, i learnt the realities of digital foot print through a storytelling based on something real called the dark web.`,
+  `its about loving the digital so much because of growing up with it, comaradity of both computer and human, intimacy through digital, cute, humorous and relateable because i find the design of laptops and technology weirdly hot, maybe cause of the dependency and memories it has kept all these years. for alot of people they grew up with computers and learning it fast, i learnt how navigate the web for kids game before learning my mom name isnt mom.`,
+  `i have always thought of how when i pass on, i wish there was enough documentation of me for my descendants to remember me, enough photos for my kids, grandchildren, nieces, nephews and so on, to brag how i looked or how cool i looked. So the work is also in a way to leave alittle footprint for them to find and learn more about me, thats why i document myself alot. My mother by the time got to me her third child, was tired of taking photos. There are photos but there was an apparent amount of photos compared to me and my brothers. I started documenting myself even more just to be remembered or at least to be bragged about, maybe ill explore more on that, the need to document self.`,
+  `I also wonder how would my tombstone look like in a digital space, will it be covered in flowers and will all chats be present?`,
+  `The word chat is used in live stream, which i believe started on twitch. Chat clip that, are you fr chat? this is the twitch stremer talking to their audience and refernecing to them, creating a connection with the viewer and streamer. It creates this idea that the streamer and viewer are more than just transactional but are friends in the space, the line of a fan becomes blurred, becoming more welcoming for informalities.`,
+  `Personally streamers, youtbers, influencers are different from celebrity culture. Streamers welcome their fans, welcome them, while as celebrities often prioritise privacy. Both still have fans, both keep their fans. Maybe possiblity of upbrings? But sometimes they take their fans for advantage and create this "i am your friend, i care for you" persona so they can "buy this, like if you know me youll know i live for this brand so buy it" or selling their own products to their fans. This also creates this landfill of merch and consumerism. Fan base and consumerism.`,
+  `But anyways chat is just a twitch term that became an internet slang used in phrases now as a retorical question. like chat is this real? chat no way he just said that. chat did u clip that. Slangs from memes also being incorprated to our daily lives now, used in normal conversations, sometimes even referencing them in formal settings. i wonder if internet slang will ever be a norm in acedmic writing, blurring the line for formal writing, cause with the digital age i feel writing has become more informal so its easier to digest, well maybe from things ive seen i feel alot of writings have become infromal because of its easier accessablity.`,
+  `In singapore, antibiotics were last resorts and were strictly advised to complete the course the doctor prescribed to. She realised with myanmar, there was a lack of knowledge on medicine. Myanmar didnt have much, we couldnt, we barely had escalators, i remembered electricity always getting cut off at malls randomly. This was so common in our daily lives, we just pause what ever we were doing till the lights turn back on. Almost like robots.`,
+  `Another thing i remember about Myanmar, during the rise of covid (2021), a coup emerged where the junta took over the government and myanmar was once again under military rule by force (sore losers btw for just resorting to overthrowing and denial of the peoples votes, claiming it was rigged even tho the people of myanmar claimed they wanted aung san suu kyi to be the leader for myanmar), hospitals were cut even through there were overflow of patients. Healthcare resources were held as hostage from its people. There were news/ whispers of how freedom fighters had to steal oxygen tank and medicines, giving them to churches and health aids to help the people who couldnt access it. The a community act of care and justice.`,
+  `Necropolitics. Weaponization of Healthcare / Medical Warfare. Healthocide.`,
+  `Junta believes that the people serve the rulers, the government doesnt serve them, they dont believe in their people and the people dont believe in them. All myanmar ever wanted was to be free from the shackles of the military rule, not to live in fear.`,
+  `1988. 2007.`,
+  `These are from experience. Myanmar lacked resources and care from its own rulers, there was still beauty and romanticism, a coping of an experience that this was our life, the rundown houses, the hot air, lack of technological advancement (i used to joke that myanmar was 10 years behind time. When cds were becoming common in other countries, radios were still in, when bluetooth streaming became popular, myanmar had just adapted cds. A classmate of mine said she would have loved that as she saw herself as an old at heart person, she was two years younger than me. I kind of cringed but now im noticing people craving for the archivals, the old digital medias like cds, mp3 players, cassettes, vinyls, old game consoles. I guess people are craving for nostalgia and want to feed the longing by consuming. Rather than romantisation of the state, romantasation of the time.)`,
+  `People from first world country would often hate being in a third world south east asia or love it. Backpackers love it, maybe from seeing new perspective, learning from a different positionality. The lack of technology makes it harder for visitors that arent used to slower pace, speaking from observation and my own recall of annoyances, i used to be able to handle the slow pace but now i get annoyed when i visit my relatives and the internet is too slow, working, yet too slow. They are more grateful the internet even works. My cousins when they visit singapore immediately connects to the internet. They glue their eyes to the ipads. Once i snatched my cousins phone and told him to enjoy the view, stop looking at the phone. He threw a temper tantrum, punches were thrown at each other. My parents explains to me that he doesnt have internet in myanmar, this is the only time he gets to play and enjoy this, this is his luxury. That made me realised my form of luxury was different from my cousin, i started realising the privileges i had compared to his and i understood then why they found the ipad screen to be precious, clinging onto every minute they have with it because they know its borrowed, making use of it till it lasts.`,
+  `Positionality in the internet space, the use of it, the value of it is really strong in countries that has lack of access. When lacking, the resource becomes even more precious. First world people can easily log out, tell people to delete social media, stay off the internet because the grass is so green outside. Which i agree to a certain extent as the situation in first world is the overconumsion, sometimes resulting in mental health declines. However, the situation for southeast asian third worlds is different, this is their only source of news outside a fixed narrative. Yes there are fixed narratives, a controlled narrative by the ones in power, online as well, but theres now access to deeper dives to the narrative, more ways to question huhs and whys? Education, information, different narratives becomes accessible, this becomes dangerous for the people in power. If the people realise they can fight back, it becomes harder to control.`,
+  `The higher powers use resource scarcity to control the people. Lack of education keeps them from questioning, questioning why cant things be better? Conversations, especially from different narratives, is dangerous for the people in power. Community is dangerous. A hungry man is easier to bait with food, especially if they dont know how to fish. A person who knows how to fish scares the big man for they are not dependent on them, but take away their lake, now they have to bargain for access, take away the skill, and you depend on them for the food, for anything even as little not even the fish but for the lakes water.`,
+  `Quotes i thought. your friends arent that bad. Your falling again arent you. Its not so bad anymore is it. You feel alone but u arent. Flowers really reflect your state. How connected have u felt with the earth again. It ok if they dont love you. Why do u dress up? Who has it been for? You look happy with make up. At the back of my head, i knew i only love the pieces of myself i saw in you, i just wanted to love myself more than anything. The disconnection with my body and mind has overwhelmed me i want my heart to tell me shes ready to accept back my mind and body again and overflow with many love, the left overs of what i could not give and more to offer for myself and others. You have to let go, eventually, the burden shouldnt be carried on any longer, free ur shoulder, its ok, theyll be fine, youll be fine.`,
+  `The games we play by Eric Berne. I found this reading (recommended by salleh) to be very interesting in talking about the responses and the reasoning behind them. After reading, I didn't write this reflection asap but took my time to reflect and talk about it with my fellow classmates to ask on their perspective of it.`,
+  `What I took mainly from this reading. We have three ego state: Parent, Adult, Child. They are the agent and responses to conversations we have with people, and it depends on time, situation, connection and the words of the agent (the way they say it). The parent is what we know and influenced learning from older/impactful influencer in our lives. Taught by our parents/ guardians, the way they act and respond to situations unconsciously is act later on by ourselves, as this is something we become aware of only know how to act (for example, like mother like daughter, and advice/ act that a mother has once done is reflected onto their daughters and seen through as a repeated cycle, most of the time seen un breakable.) This is because this is what we know half our lives as a child, these parents are seen as the biggest influence, the way they act ends up defining the identity of an individual as this is what is seen as the ideal state of a person. My question is, so is god a parent figure in some peoples life that affects their agents/respondents? The parent is basically the obveserved lessons we have from our everyday and knowledge from childhood, they are also the ones that helps the adult ego in design making, making our decisions in responses faster, so the adult ego state does not need to used too often. The adult ego state is a very important state in us, this is where we learn, develop and talk in equal standing. This is the state where perspectives are more open and u are not talking down or above the respondent/ agent. Adult ego state is more logical based rather than emotional or experience based. The parent state is an experience based. The child state however is when we revert back into a innocence of a child, whether in a temper tantrum or over emotional state. This is where we respond emotional based. We are most valuable at this state rather.`,
+  `He does talk about how child responses could be triggered by the agent as they were pushed to their emotional state to respond.`,
+  `Some may be adult dominate, and some maybe child state dominate, but that does not mean they do not have all three state, everyone as as whole has all three states part of them, it just at times depending on the connection of intimacy, they show only one state or all state, sometimes one dominating the other in response.`,
+  `This reading expended my thinking of communications and understanding of the intimacy in conversation, the strangeness of "strokes" requiring to each person, the exception to get the expected response or more response, depending on the connection, as well as the reasoning to some responses in people.`,
+];
+
+// ─── RIGHT PANEL ───
+const right=document.getElementById('right');
+const slots=IMGS.map(src=>{const d=document.createElement('div');d.className='img-slot';const i=document.createElement('img');i.loading='lazy';i.src=src;d.appendChild(i);right.appendChild(d);return d;});
+let currentSlot=0;slots[0].classList.add('visible');
+function showSlot(i){const idx=((i%IMGS.length)+IMGS.length)%IMGS.length;if(idx===currentSlot)return;slots[currentSlot].classList.remove('visible');currentSlot=idx;slots[currentSlot].classList.add('visible');}
+
+// ─── BUILD TEXT ───
+// Each word gets: secIdx, posInLine (0=edge, 1=centre), mirror spans
+const container=document.getElementById('yapContainer');
+const wordMeta=[];   // master list
+const copySpans=[];  // [copyIdx][wordIdx]
+
+function buildCopy(master){
+  const wrap=document.createElement('div');wrap.className='yap-wrap';
+  const spans=[];
+  sections.forEach((text,si)=>{
+    const p=document.createElement('p');
+    const words=text.split(/\s+/);
+    const total=words.length;
+    const mid=(total-1)/2;
+    let motifCountThisSection=0; // curation cap
+    words.forEach((w,wi)=>{
+      const clean=w.replace(/[^a-zA-Z]/g,'').toLowerCase();
+      const isTrig=TRIGGER_KEYS.includes(clean);
+      let isMotif=false;
+      if(!isTrig && MOTIF_WORDS.hasOwnProperty(clean) && motifCountThisSection<MAX_MOTIF_PER_SECTION){
+        isMotif=true;
+        motifCountThisSection++;
+      }
+      const span=document.createElement('span');
+      span.className=isTrig?'trigger':(isMotif?'motif':'word');
+      span.textContent=w;
+      span.dataset.si=si;
+      span.dataset.wi=wi;
+      span.style.opacity='0';
+      // posInLine: 0 = outer edge, 1 = dead centre
+      // left half: wi/mid, right half: (total-1-wi)/mid
+      const distFromEdge=Math.min(wi, total-1-wi);
+      const posInLine=distFromEdge/mid; // 0=edge, 1=centre
+      if(master){
+        wordMeta.push({orig:w,clean,isTrig,isMotif,motifGroup:isMotif?MOTIF_WORDS[clean]:null,secIdx:si,posInLine,state:'off'});
+      }
+      spans.push(span);
+      p.appendChild(span);
+      if(wi<total-1)p.appendChild(document.createTextNode(' '));
+    });
+    wrap.appendChild(p);
+  });
+  const spacer=document.createElement('div');spacer.style.height='64px';
+  wrap.appendChild(spacer);container.appendChild(wrap);
+  return{wrap,spans};
+}
+
+const{wrap:copyA,spans:spansA}=buildCopy(true);
+const{wrap:copyB,spans:spansB}=buildCopy(false);
+copySpans.push(spansA,spansB);
+
+// ─── JUMP-LINKS: click a dotted word, jump to the farthest occurrence of its group ───
+const motifByGroup={};
+wordMeta.forEach((wd,idx)=>{
+  if(wd.isMotif)(motifByGroup[wd.motifGroup]=motifByGroup[wd.motifGroup]||[]).push(idx);
+});
+function jumpMotif(group,fromIdx,copyIdx){
+  const occ=motifByGroup[group];if(!occ||occ.length<2)return;
+  const fromSec=wordMeta[fromIdx].secIdx;
+  let best=null,bestDist=-1;
+  occ.forEach(i=>{
+    if(i===fromIdx)return;
+    const d=Math.abs(wordMeta[i].secIdx-fromSec);
+    if(d>bestDist){bestDist=d;best=i;}
+  });
+  if(best===null)return;
+  const targetEl=copySpans[copyIdx][best];
+  if(targetEl)targetEl.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function wireCopy(copyIdx){
+  const spans=copySpans[copyIdx];
+  wordMeta.forEach((wd,idx)=>{
+    const el=spans[idx];if(!el)return;
+    if(wd.isTrig){
+      el.addEventListener('mouseenter',()=>showPopup(el,wd.clean));
+      el.addEventListener('mouseleave',hidePopup);
+    }
+    if(wd.isMotif)el.addEventListener('click',()=>jumpMotif(wd.motifGroup,idx,copyIdx));
+  });
+}
+wireCopy(0);wireCopy(1);
+
+// copyC only pads the infinite-scroll wrap below the visible copy —
+// build it after the page has painted so it doesn't block first load
+setTimeout(()=>{
+  const{spans:spansC}=buildCopy(false);
+  copySpans.push(spansC);
+  wireCopy(2);
+  updateVisibleSections();
+},30);
+
+function setOp(idx,op,dur){
+  copySpans.forEach(s=>{
+    if(!s[idx])return;
+    s[idx].style.transition=`opacity ${dur}s ease`;
+    s[idx].style.opacity=op;
+  });
+}
+
+// ─── VIEWPORT (cached — recomputed only on scroll, never every frame) ───
+const leftEl=document.getElementById('left');
+const sectionToIndices={};
+wordMeta.forEach((wd,idx)=>{(sectionToIndices[wd.secIdx]=sectionToIndices[wd.secIdx]||[]).push(idx);});
+let visibleWordSet=new Set();
+function updateVisibleSections(){
+  const st=leftEl.scrollTop;
+  const sb=st+leftEl.clientHeight;
+  const vis=new Set();
+  copyA.querySelectorAll('p').forEach(p=>{
+    const pt=p.offsetTop+copyA.offsetTop;
+    const pb=pt+p.offsetHeight;
+    if(pb>st&&pt<sb){
+      const sp=p.querySelector('span[data-si]');
+      if(sp)vis.add(parseInt(sp.dataset.si));
+    }
+  });
+  if(vis.size===0)sections.forEach((_,i)=>vis.add(i));
+  const ws=new Set();
+  vis.forEach(si=>{(sectionToIndices[si]||[]).forEach(i=>ws.add(i));});
+  visibleWordSet=ws;
+}
+
+// ─── SCROLL ───
+const pctEl=document.getElementById('pct');
+let jumping=false;
+leftEl.addEventListener('scroll',()=>{
+  if(jumping)return;
+  const h=copyA.offsetHeight;if(!h)return;
+  if(leftEl.scrollTop>=h*2){jumping=true;leftEl.scrollTop-=h;jumping=false;}
+  if(leftEl.scrollTop<h){jumping=true;leftEl.scrollTop+=h;jumping=false;}
+  const p=(leftEl.scrollTop%h)/h;
+  pctEl.textContent=Math.round(p*100)+'%';
+  showSlot(Math.floor(p*IMGS.length));
+  updateVisibleSections();
+},{passive:true});
+window.addEventListener('load',()=>{leftEl.scrollTop=copyA.offsetHeight;requestAnimationFrame(updateVisibleSections);});
+updateVisibleSections();
+
+// ─── POPUP ───
+const popup=document.getElementById('wordPopup'),popupImg=document.getElementById('popupImg');
+function showPopup(el,key){const src=TRIGGERS[key];if(!src)return;const r=el.getBoundingClientRect();popupImg.src=src;popup.style.left=(r.left+r.width/2)+'px';popup.style.top=r.top+'px';popup.classList.add('show');}
+function hidePopup(){popup.classList.remove('show');}
+
+// ─── MIC ───
+const micDot=document.getElementById('micDot');
+const glyphs='abcdefghijklmnopqrstuvwxyz·_-.';
+function corrupt(s){return s.split('').map(c=>Math.random()<0.5?glyphs[~~(Math.random()*glyphs.length)]:c).join('');}
+
+let vol=0;        // smoothed volume 0-1
+let rawVol=0;     // fast unsmoothed for snap response
+
+const NOISE_FLOOR=0.15;  // below this = silence
+
+// ─── MAIN RENDER LOOP ───
+// Runs every animation frame, directly maps volume → opacity per word
+// No intervals, no timers for reveal — pure continuous reactive mapping
+//
+// Logic:
+// - vol above noise floor → active
+// - each word has posInLine (0=edge, 1=centre)
+// - edges always reveal first: threshold for a word = posInLine * 0.6
+//   so edge words (pos=0) reveal even at low volume
+//   centre words (pos=1) need vol > 0.6 to appear
+// - target opacity for each word = smoothstep from 0→1 as vol crosses its threshold
+// - transition speed = volume-driven: loud=fast, soft=slow
+// - when silent: all words fade to 0, speed = moderate
+
+function smoothstep(edge0,edge1,x){
+  const t=Math.max(0,Math.min(1,(x-edge0)/(edge1-edge0)));
+  return t*t*(3-2*t);
+}
+
+// per-word current displayed opacity (tracked to avoid redundant sets)
+const wordOpacity=new Float32Array(wordMeta.length).fill(0);
+
+// "active" = currently visible, or still fading out after scrolling away.
+// Bounds per-frame work to a few hundred words instead of the whole document.
+const activeIndices=new Set();
+
+function renderFrame(){
+  const active=vol>NOISE_FLOOR;
+  const toProcess=new Set(visibleWordSet);
+  activeIndices.forEach(i=>toProcess.add(i));
+
+  toProcess.forEach(idx=>{
+    const wd=wordMeta[idx];
+    const inView=visibleWordSet.has(idx);
+
+    let targetOp;
+    if(!active||!inView){
+      targetOp=0;
+    } else {
+      // word reveals when vol exceeds its personal threshold
+      // edge words (posInLine=0): threshold = NOISE_FLOOR (reveal immediately)
+      // centre words (posInLine=1): threshold = 0.65
+      const wordThresh=NOISE_FLOOR+wd.posInLine*0.57;
+      targetOp=smoothstep(wordThresh, wordThresh+0.18, vol);
+    }
+
+    const diff=Math.abs(targetOp-wordOpacity[idx]);
+    if(diff<0.005){
+      if(targetOp<0.01)activeIndices.delete(idx);
+      return; // skip tiny changes
+    }
+
+    // transition speed: loud = fast snap, soft = slow creep
+    // when going UP: speed driven by vol (loud=0.05s, soft=0.6s)
+    // when going DOWN (to 0): moderate-fast fade (0.25-0.5s)
+    let dur;
+    if(targetOp>wordOpacity[idx]){
+      dur=Math.max(0.04, 0.65-(vol-NOISE_FLOOR)*1.8);
+    } else {
+      dur=0.8+wd.posInLine*0.5; // echo fade — centre words trail longer
+    }
+
+    wordOpacity[idx]=targetOp;
+    setOp(idx,targetOp,dur);
+    if(targetOp>0.01||inView)activeIndices.add(idx); else activeIndices.delete(idx);
+  });
+}
+
+// Glitch: runs independently, corrupts visible words based on volume
+setInterval(()=>{
+  if(vol<NOISE_FLOOR)return;
+  const glitchRate=0.03+vol*0.12; // more volume = more glitch
+  visibleWordSet.forEach(idx=>{
+    if(wordOpacity[idx]<0.1)return;
+    const wd=wordMeta[idx];
+    if(Math.random()<glitchRate){
+      const dur=50+Math.random()*(200-vol*150); // loud = shorter glitch flash
+      copySpans.forEach(s=>{if(s[idx])s[idx].textContent=corrupt(wd.orig);});
+      setTimeout(()=>{copySpans.forEach(s=>{if(s[idx])s[idx].textContent=wd.orig;});},dur);
+    }
+  });
+},100);
+
+async function initMic(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const ctx=new AudioContext();
+    const analyser=ctx.createAnalyser();analyser.fftSize=256;
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    const data=new Uint8Array(analyser.frequencyBinCount);
+    micDot.classList.add('on');
+
+    let lastLoopT=0;
+    function loop(t){
+      if(t-lastLoopT<33){requestAnimationFrame(loop);return;} // cap ~30fps — steadier than straining for 60 on old hardware
+      lastLoopT=t;
+      analyser.getByteFrequencyData(data);
+      rawVol=data.reduce((a,b)=>a+b,0)/data.length/60;
+      // two smoothing rates: fast attack, slow release
+      if(rawVol>vol){
+        vol=vol*0.55+rawVol*0.45; // fast attack
+      } else {
+        vol=vol*0.96+rawVol*0.04; // echo release
+      }
+      vol=Math.min(vol,1);
+
+      if(vol>NOISE_FLOOR) micDot.classList.add('loud');
+      else micDot.classList.remove('loud');
+
+      renderFrame();
+      requestAnimationFrame(loop);
+    }
+    loop();
+  } catch {
+    // no mic: all words at 60%
+    wordMeta.forEach((_,i)=>{wordOpacity[i]=0.6;setOp(i,0.6,0.5);});
+  }
+}
+initMic();
+
+// ─── CURSOR TRAIL ───
+const dotEl=document.getElementById('dot');
+const POOL=30;const pool=[];let pidx=0,lx=0,ly=0;
+for(let i=0;i<POOL;i++){const img=document.createElement('img');img.className='trail-img';img.src=TRAIL[i%TRAIL.length];document.body.appendChild(img);pool.push({el:img,tid:null});}
+document.addEventListener('mousemove',e=>{
+  const{clientX:x,clientY:y}=e;dotEl.style.left=x+'px';dotEl.style.top=y+'px';
+  if(Math.hypot(x-lx,y-ly)>14){
+    const slot=pool[pidx++%POOL];clearTimeout(slot.tid);
+    slot.el.src=TRAIL[~~(Math.random()*TRAIL.length)];
+    const sz=18+Math.random()*14;
+    slot.el.style.cssText=`width:${sz}px;height:${sz}px;left:${x}px;top:${y}px;opacity:0.85;transition:opacity 0.2s ease;`;
+    slot.tid=setTimeout(()=>{slot.el.style.opacity='0';},600+Math.random()*1000);lx=x;ly=y;
+  }
+});
+</script>
+</body>
+</html>
